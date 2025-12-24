@@ -198,18 +198,25 @@
             </div>
           </div>
 
-          <!-- REGISTRY TABLE SECTION -->
+          <!-- REGISTRY TABLE SECTION with Search -->
           <div class="space-y-6">
-            <div class="flex items-center justify-between px-2">
+            <div class="flex items-center justify-between px-2 flex-wrap gap-4">
               <h2 class="text-sm font-bold text-white tracking-widest uppercase flex items-center gap-3">
                 <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> Registry Logs
               </h2>
-              <div class="flex gap-3">
+              <div class="flex items-center gap-3">
+                <div class="relative">
+                  <input type="text" id="searchInput" placeholder="Search ..." 
+                         class="pl-10 pr-4 py-2 bg-slate-800/70 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-blue-500 w-64"
+                         onkeyup="filterTable()">
+                  <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                </div>
                 <button onclick="openClearModal()" class="text-red-400 hover:text-white text-[10px] system-font border border-red-500/20 px-4 py-2 rounded-xl bg-red-500/5 uppercase transition-all">
                   <i class="fas fa-trash-sweep mr-2"></i> Clear Records
                 </button>
               </div>
             </div>
+
             <div class="glass-panel rounded-3xl border-slate-800/40 overflow-hidden shadow-2xl">
               <div class="overflow-x-auto">
                 <table id="mainTable" class="w-full text-left whitespace-nowrap">
@@ -255,6 +262,8 @@
     const FIELDS = ["siteName","partner","registerDate","expireDate","requestSubscript","user","password","ipPublic","gateway","ipPrivate","entryId","speed","wirelessSsid","wirelessPass","userDevice","pasDevices","hotline"];
     const TELEGRAM_TOKEN = "8228223432:AAFbVl-rjxoaRq44L0oUufui3HpBtAmQzMo";
     const TELEGRAM_CHAT_ID = "-1003318155720";
+
+    let allData = []; // រក្សាទិន្នន័យទាំងអស់សម្រាប់ filter
 
     function updateTime() {
       document.getElementById("footer-time").innerText = new Date().toLocaleTimeString("en-GB");
@@ -481,9 +490,11 @@
 
     function loadStoredData() {
       const data = getStoredData();
+      allData = data; // រក្សាទុកសម្រាប់ filter
       const tableBody = document.getElementById("tableBody");
       tableBody.innerHTML = "";
       document.getElementById("record-count").innerText = `Total Records: ${data.length}`;
+
       if (data.length === 0) {
         tableBody.innerHTML = `<tr id="emptyRow"><td colspan="19" class="p-20 text-center text-slate-600 italic system-font">No records found in the database.</td></tr>`;
       } else {
@@ -491,6 +502,38 @@
         sorted.forEach((item, index) => appendRowToTable(item, index + 1));
       }
       updateNotifications(data);
+    }
+
+    function filterTable() {
+      const input = document.getElementById("searchInput");
+      const filter = input.value.toLowerCase().trim();
+
+      const tableBody = document.getElementById("tableBody");
+      tableBody.innerHTML = "";
+
+      if (!filter) {
+        // បើមិនមាន search បង្ហាញទាំងអស់
+        const sorted = allData.slice().sort((a, b) => b.timestamp - a.timestamp);
+        sorted.forEach((item, index) => appendRowToTable(item, index + 1));
+        document.getElementById("record-count").innerText = `Total Records: ${allData.length}`;
+        return;
+      }
+
+      const filtered = allData.filter(item => {
+        return FIELDS.some(key => {
+          const val = (item[key] || "").toString().toLowerCase();
+          return val.includes(filter);
+        });
+      });
+
+      if (filtered.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="19" class="p-20 text-center text-slate-500 italic system-font">គ្មានទិន្នន័យដែលត្រូវគ្នានឹងការស្វែងរកទេ។</td></tr>`;
+      } else {
+        const sorted = filtered.slice().sort((a, b) => b.timestamp - a.timestamp);
+        sorted.forEach((item, index) => appendRowToTable(item, index + 1));
+      }
+
+      document.getElementById("record-count").innerText = `រកឃើញ៖ ${filtered.length} / សរុប៖ ${allData.length}`;
     }
 
     async function exportToExcel() {
@@ -669,7 +712,7 @@
 
               const entry = { timestamp: Date.now() + i };
               let fieldIndex = 0;
-              let hasData = false; // ពិនិត្យថាតើ row មានទិន្នន័យឬអត់
+              let hasData = false;
 
               for (let j = 0; j < values.length; j++) {
                 if (j === noIndex) continue;
@@ -680,13 +723,11 @@
                 if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
                 entry[FIELDS[fieldIndex]] = val;
 
-                // បើមានតម្លៃណាមួយមិនមែន "-" ឬទទេ → គឺមានទិន្នន័យ
                 if (val && val !== "-" && val !== "") hasData = true;
 
                 fieldIndex++;
               }
 
-              // បើ row មានទិន្នន័យ → បញ្ចូល
               if (hasData) newEntries.push(entry);
             }
           } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
