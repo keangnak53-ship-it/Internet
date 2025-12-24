@@ -106,6 +106,7 @@
                 <i id="toggleIcon" class="fas fa-eye-slash"></i>
               </button>
             </div>
+
             <div id="formContainer">
               <form id="entryForm" onsubmit="handleCommit(event)" class="space-y-6">
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -126,6 +127,7 @@
                     <input type="date" id="expireDate" required class="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500" />
                   </div>
                 </div>
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <label class="block text-[10px] system-font text-slate-400 uppercase mb-2">Public IP</label>
@@ -144,6 +146,7 @@
                     <input type="text" id="speed" class="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-white focus:outline-none" placeholder="e.g. 50Mbps" />
                   </div>
                 </div>
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <label class="block text-[10px] system-font text-slate-400 uppercase mb-2">System ID</label>
@@ -162,6 +165,7 @@
                     <input type="text" id="user" class="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-white focus:outline-none" />
                   </div>
                 </div>
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 text-xs">
                   <div>
                     <label class="block text-[10px] system-font text-slate-400 uppercase mb-2">WiFi SSID</label>
@@ -184,6 +188,7 @@
                     <input type="text" id="hotline" class="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-white focus:outline-none" />
                   </div>
                 </div>
+
                 <div class="flex justify-end pt-4">
                   <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-12 rounded-2xl text-xs transition-all uppercase tracking-[0.2em] flex items-center gap-4 shadow-xl shadow-blue-600/20 w-full md:w-auto justify-center">
                     Submit Entry <i class="fas fa-plus-circle"></i>
@@ -356,7 +361,7 @@
         } else if (daysLeft <= 7) {
           emoji = "⚠️";
           statusText = `នៅសល់ ${daysLeft} ថ្ងៃ`;
-        } else if (daysLeft <= 14 && daysLeft >= 12) {
+        } else if (daysLeft <= 14) {
           emoji = "⏰";
           statusText = `នៅសល់ ${daysLeft} ថ្ងៃ`;
         }
@@ -550,6 +555,41 @@
       loadStoredData();
       showNotification("Record saved successfully.");
       e.target.reset();
+
+      // ផ្ញើសារភ្លាមៗបើ record ថ្មីជិតផុតកំណត់
+      if (formData.expireDate) {
+        const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+        const exp = new Date(formData.expireDate); exp.setHours(0,0,0,0);
+        const daysLeft = Math.ceil((exp - todayDate) / 86400000);
+
+        if (daysLeft <= 14) {
+          let emoji = "", statusText = "";
+          if (daysLeft <= 0) {
+            emoji = "🔥";
+            statusText = "ផុតកំណត់ហើយ";
+          } else if (daysLeft <= 3) {
+            emoji = "‼️";
+            statusText = `នៅសល់ ${daysLeft} ថ្ងៃ`;
+          } else if (daysLeft <= 7) {
+            emoji = "⚠️";
+            statusText = `នៅសល់ ${daysLeft} ថ្ងៃ`;
+          } else {
+            emoji = "⏰";
+            statusText = `នៅសល់ ${daysLeft} ថ្ងៃ`;
+          }
+
+          const msg = `🔔 ការជូនដំណឹងថ្មី (Record ថ្មី)\n\n` +
+                      `${emoji} <b>ទីតាំង៖ ${formData.siteName || "មិនមានឈ្មោះ"}</b>\n` +
+                      `   ក្រុមហ៊ុន៖ ${formData.partner || "-"}\n` +
+                      `   System ID៖ ${formData.entryId || "-"}\n` +
+                      `   ស្ថានភាព៖ ${statusText}\n` +
+                      `   ផុតកំណត់៖ ${formData.expireDate}\n` +
+                      `   Hotline៖ ${formData.hotline || "-"}\n\n` +
+                      `<i>បានបញ្ចូលថ្មីនៅ ${new Date().toLocaleString("km-KH")}</i>`;
+
+          sendToTelegram(msg);
+        }
+      }
     }
 
     function removeRow(btn) {
@@ -613,7 +653,6 @@
             const lines = e.target.result.split("\n");
             if (lines.length < 2) return;
 
-            // យក header ដើម្បីរកជួរឈរ NO
             let headers = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
                                  .map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
 
@@ -630,19 +669,25 @@
 
               const entry = { timestamp: Date.now() + i };
               let fieldIndex = 0;
+              let hasData = false; // ពិនិត្យថាតើ row មានទិន្នន័យឬអត់
 
               for (let j = 0; j < values.length; j++) {
-                if (j === noIndex) continue; // រំលង NO
+                if (j === noIndex) continue;
 
                 if (fieldIndex >= FIELDS.length) break;
 
                 let val = (values[j] || "").trim();
                 if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
                 entry[FIELDS[fieldIndex]] = val;
+
+                // បើមានតម្លៃណាមួយមិនមែន "-" ឬទទេ → គឺមានទិន្នន័យ
+                if (val && val !== "-" && val !== "") hasData = true;
+
                 fieldIndex++;
               }
 
-              newEntries.push(entry);
+              // បើ row មានទិន្នន័យ → បញ្ចូល
+              if (hasData) newEntries.push(entry);
             }
           } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
             const data = new Uint8Array(e.target.result);
@@ -665,17 +710,22 @@
 
               const entry = { timestamp: Date.now() + i };
               let fieldIndex = 0;
+              let hasData = false;
 
               for (let j = 0; j < row.length; j++) {
-                if (j === noIndex) continue; // រំលង NO
+                if (j === noIndex) continue;
 
                 if (fieldIndex >= FIELDS.length) break;
 
-                entry[FIELDS[fieldIndex]] = (row[j] || "").toString().trim();
+                let val = (row[j] || "").toString().trim();
+                entry[FIELDS[fieldIndex]] = val;
+
+                if (val && val !== "-" && val !== "") hasData = true;
+
                 fieldIndex++;
               }
 
-              newEntries.push(entry);
+              if (hasData) newEntries.push(entry);
             }
           } else {
             showNotification("សូមជ្រើសរើស file .csv ឬ .xlsx ប៉ុណ្ណោះ!");
@@ -686,7 +736,7 @@
             const currentData = getStoredData();
             saveToStorage([...currentData, ...newEntries]);
             loadStoredData();
-            showNotification(`បាននាំចូលជោគជ័យ ${newEntries.length} កំណត់ត្រា! (បានរំលងជួរឈរ NO បើមាន)`);
+            showNotification(`បាននាំចូលជោគជ័យ ${newEntries.length} កំណត់ត្រា! (បានរំលង row ទទេ និងជួរឈរ NO បើមាន)`);
           } else {
             showNotification("គ្មានទិន្នន័យសមរម្យក្នុង file នោះទេ។ សូមពិនិត្យ header និងទិន្នន័យ។");
           }
